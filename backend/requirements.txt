@@ -1,0 +1,9 @@
+# All open-source dependencies (MIT / BSD / Apache-2.0 / ISC / PSF licenses).
+fastapi>=0.115
+uvicorn[standard]>=0.30
+httpx>=0.27
+socksio>=1.0          # SOCKS proxy support for httpx
+pydantic>=2.7
+beautifulsoup4>=4.12
+lxml>=5.0
+dnspython>=2.6
