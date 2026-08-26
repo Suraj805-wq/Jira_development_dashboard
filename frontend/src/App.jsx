@@ -3,6 +3,7 @@ import { api, flagFromCode, CATEGORY_COLORS, fmtEmployees } from './api.js'
 import CompanyDrawer from './components/CompanyDrawer.jsx'
 import SettingsModal from './components/SettingsModal.jsx'
 import BlocklistModal from './components/BlocklistModal.jsx'
+import DiscoveryPanel from './components/DiscoveryPanel.jsx'
 
 const PAGE_SIZE = 24
 
@@ -68,17 +69,22 @@ export default function App() {
     loadStats()
   }, [loadStats])
 
-  // poll worker status every 10s
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        setWorker(await api.get('/worker/status'))
-      } catch {}
-    }
-    poll()
-    const t = setInterval(poll, 10000)
-    return () => clearInterval(t)
+  const refreshWorker = useCallback(async () => {
+    try {
+      setWorker(await api.get('/worker/status'))
+    } catch {}
   }, [])
+
+  // poll the discovery thread every 2s so the live log actually moves
+  useEffect(() => {
+    refreshWorker()
+    const t = setInterval(refreshWorker, 2000)
+    const t2 = setInterval(loadStats, 8000)
+    return () => {
+      clearInterval(t)
+      clearInterval(t2)
+    }
+  }, [refreshWorker, loadStats])
 
   useEffect(() => {
     setPage(1)
@@ -183,21 +189,13 @@ export default function App() {
           </div>
         </div>
         <div className="topbar-actions">
-          <WorkerPill worker={worker} onToggle={async () => {
-            try {
-              if (worker?.running) await api.post('/worker/stop')
-              else await api.post('/worker/start')
-              setWorker(await api.get('/worker/status'))
-            } catch {}
-          }} />
-          <span className="source-pill live">🌐 Scraped from official company websites</span>
           <button className="btn ghost" onClick={() => setBlocklistOpen(true)}>
             🚫 Excluded ({stats?.blocked ?? 0})
           </button>
           <button className="btn ghost" onClick={() => setSettingsOpen(true)}>
-            ⚙ Scraper options
+            ⚙ Scraper
           </button>
-          <button className="btn ghost" onClick={exportCsv}>⬇ Export CSV</button>
+          <button className="btn ghost" onClick={exportCsv}>⬇ CSV</button>
           <button className="btn primary" onClick={scrapeAll} disabled={scraping}>
             {scraping ? 'Scraping…' : '✦ Scrape all'}
           </button>
@@ -208,10 +206,13 @@ export default function App() {
         <StatCard icon="🏢" label="Fleet organisations" value={stats?.companies ?? '—'} />
         <StatCard icon="🌍" label="Countries covered" value={stats?.countries ?? '—'} />
         <StatCard icon="👤" label="Decision makers" value={stats?.people ?? '—'} accent />
-        <StatCard icon="📧" label="Emails found" value={stats?.emails ?? '—'} />
+        <StatCard icon="📧" label="Published emails" value={stats?.emails ?? '—'} />
         <StatCard icon="☎️" label="Phone numbers" value={stats?.phones ?? '—'} />
-        <StatCard icon="✅" label="Verified emails" value={stats?.verified ?? '—'} />
+        <StatCard icon="✅" label="SMTP-verified" value={stats?.verified ?? '—'} />
+        <StatCard icon="❔" label="Derived (unverified)" value={stats?.derived ?? '—'} />
       </div>
+
+      <DiscoveryPanel worker={worker} onChange={refreshWorker} />
 
       <div className="global-search">
         <input
@@ -375,29 +376,6 @@ export default function App() {
 
       {toast && <div className="toast">{toast}</div>}
     </div>
-  )
-}
-
-function WorkerPill({ worker, onToggle }) {
-  const act = worker?.activity
-  const actLabel = {
-    discover: '🔭 Discovering new organisations',
-    scrape: '🕷 Scraping new organisations',
-    people: '👤 Finding decision makers',
-    verify: '✓ Verifying emails',
-  }[act]
-  return (
-    <button className="worker-pill" onClick={onToggle} title="Click to pause/resume the background worker">
-      <span className={`worker-dot ${worker?.running ? 'on' : ''}`} />
-      <span className="worker-text">
-        {worker?.running
-          ? actLabel || '⚙ Worker running'
-          : '⚙ Worker paused'}
-      </span>
-      {worker?.snapshot?.verified_people != null && (
-        <span className="worker-stat">✓ {worker.snapshot.verified_people} verified execs</span>
-      )}
-    </button>
   )
 }
 

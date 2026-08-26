@@ -165,7 +165,7 @@ def lookup_company(body: LookupIn):
         "domain": chosen_domain,
         "website": chosen_base or f"https://www.{chosen_domain}",
         "country": "Unknown",
-        "country_code": "ZZ",
+        "country_code": "UN",
         "city": None,
         "category": "Custom Search",
         "description": f"Added on-demand via global search for “{q}”.",
@@ -297,11 +297,21 @@ def stats():
             "SELECT COUNT(*) AS c FROM scrapes s JOIN companies c ON c.id = s.company_id WHERE s.status IN ('ok','partial') AND c.blocked = 0"
         ).fetchone()["c"]
         verified = conn.execute(
-            "SELECT (SELECT COUNT(*) FROM emails e JOIN companies c ON c.id=e.company_id WHERE e.smtp_status='deliverable' AND c.blocked=0)"
-            " + (SELECT COUNT(*) FROM people pe JOIN companies c ON c.id=pe.company_id WHERE pe.smtp_status='deliverable' AND c.blocked=0) AS c"
+            "SELECT (SELECT COUNT(*) FROM emails e JOIN companies c ON c.id=e.company_id "
+            "WHERE e.verdict='deliverable' AND c.blocked=0)"
+            " + (SELECT COUNT(*) FROM people pe JOIN companies c ON c.id=pe.company_id "
+            "WHERE pe.email_status='verified' AND c.blocked=0) AS c"
+        ).fetchone()["c"]
+        derived = conn.execute(
+            "SELECT COUNT(*) AS c FROM people pe JOIN companies c ON c.id=pe.company_id "
+            "WHERE pe.email_status='pattern-derived' AND c.blocked=0"
         ).fetchone()["c"]
         blocked_count = conn.execute(
             "SELECT COUNT(*) AS c FROM companies WHERE blocked = 1"
+        ).fetchone()["c"]
+        unscraped = conn.execute(
+            "SELECT COUNT(*) AS c FROM companies c WHERE c.blocked=0 "
+            "AND c.id NOT IN (SELECT company_id FROM scrapes)"
         ).fetchone()["c"]
     finally:
         conn.close()
@@ -313,5 +323,7 @@ def stats():
         "people": people,
         "scraped_companies": scraped,
         "verified": verified,
+        "derived": derived,
         "blocked": blocked_count,
+        "unscraped": unscraped,
     }

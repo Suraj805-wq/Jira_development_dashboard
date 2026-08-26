@@ -5,6 +5,7 @@ Run:
 """
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -12,15 +13,30 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from .blocklist import apply_blocklist, ensure_default_blocklist
-from .database import init_db, worker_get
+from .blocklist import apply_blocklist, clear_legacy_defaults
+from .database import init_db
 from .routers import blocklist, companies, discover, enrich, export, settings, verify, worker
 from .seed_data import seed_companies
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    init_db()
+    seed_companies()
+    clear_legacy_defaults()
+    apply_blocklist()
+    from .worker import get_worker
+
+    get_worker().start()
+    yield
+    get_worker().stop()
+
 
 app = FastAPI(
     title="FleetLeads",
     description="Find fleet-management & telematics organisations and their decision makers.",
-    version="1.0.0",
+    version="1.1.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -41,25 +57,14 @@ app.include_router(blocklist.router)
 app.include_router(worker.router)
 
 
-@app.on_event("startup")
-def _startup() -> None:
-    init_db()
-    seed_companies()
-    ensure_default_blocklist()
-    apply_blocklist()
-    # Auto-start the continuous worker (unless explicitly disabled).
-    from .worker import get_worker
-
-    if worker_get("enabled") != "false":
-        get_worker().start()
-
-
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "app": "FleetLeads"}
+    from .worker import get_worker
+
+    w = get_worker()
+    return {"status": "ok", "app": "FleetLeads", "worker": w.running}
 
 
-# ---- Static frontend (built React app) --------------------------------
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 
 if FRONTEND_DIST.exists():
