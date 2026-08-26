@@ -12,39 +12,18 @@ import re
 
 from .database import get_conn
 
-# (name, domain) — the organisations the user wants excluded.
-DEFAULT_BLOCKED = [
-    ("Gurtam", "gurtam.com"),
-    ("Navixy", "navixy.com"),
-    ("Geotab", "geotab.com"),
-    ("Verizon Connect", "verizonconnect.com"),
-    ("Samsara", "samsara.com"),
-    ("Fleet Complete", "fleetcomplete.com"),
-    ("Fleetio", "fleetio.com"),
-    ("GPS Wox", "gpswox.com"),
-    ("GPS Server", "gpsserver.com"),
-    ("TrackoBit", "trackobit.com"),
-    ("Militrack", "militrack.com"),
-    ("ProTrack", "protrackgps.com"),
-    ("Mapon", "mapon.com"),
-    ("Watsoo", "watsoo.com"),
-    ("GPS Trace", "gpstrace.com"),
-    ("Onelap", "onelap.in"),
-    ("Letstrack", "letstrack.in"),
-    ("LocoNav", "loconav.com"),
-    ("WheelsEye", "wheelseye.com"),
-    ("Fleetx", "fleetx.io"),
-    ("Webfleet", "webfleet.com"),
-    ("Motive", "gomotive.com"),
-    ("TomTom", "tomtom.com"),
-    ("Teletrac Navman", "teletracnavman.com"),
-    ("Chevin Fleet", "chevinfleet.com"),
-    ("Frotcom", "frotcom.com"),
-    ("Trimble", "trimble.com"),
-    ("Quartix", "quartix.com"),
-    ("Locus", "locus.sh"),
-    ("Azuga", "azuga.com"),
-]
+# User-managed only. Industry leaders are part of the directory, not hidden.
+DEFAULT_BLOCKED: list[tuple[str, str]] = []
+
+# Names that used to be auto-blocked on every startup. Cleared once so Samsara,
+# Geotab, Motive, Fleetx, etc. show up in the warehouse again.
+_LEGACY_DEFAULT_NAMES = {
+    "gurtam", "navixy", "geotab", "verizon connect", "samsara", "fleet complete",
+    "fleetio", "gps wox", "gps server", "trackobit", "militrack", "protrack",
+    "mapon", "watsoo", "gps trace", "onelap", "letstrack", "loconav", "wheelseye",
+    "fleetx", "webfleet", "motive", "tomtom", "teletrac navman", "chevin fleet",
+    "frotcom", "trimble", "quartix", "locus", "azuga",
+}
 
 
 def normalize(value: str) -> str:
@@ -53,20 +32,30 @@ def normalize(value: str) -> str:
 
 
 def ensure_default_blocklist() -> int:
-    """Insert the default blocklist entries (idempotent). Returns #inserted."""
+    """Kept for compatibility — defaults are empty; exclusion is user-managed."""
+    return 0
+
+
+def clear_legacy_defaults() -> dict:
+    """Remove the old competitor auto-blocklist and unhide those companies."""
+    from .database import get_setting, set_setting
+
+    if get_setting("legacy_blocklist_cleared") == "1":
+        return {"cleared": 0, "already": True}
     conn = get_conn()
-    n = 0
+    removed = 0
     try:
-        for name, domain in DEFAULT_BLOCKED:
-            cur = conn.execute(
-                "INSERT OR IGNORE INTO blocklist(name, domain) VALUES (?, ?)",
-                (name, domain or None),
-            )
-            n += cur.rowcount
+        rows = conn.execute("SELECT id, name FROM blocklist").fetchall()
+        for row in rows:
+            if (row["name"] or "").strip().lower() in _LEGACY_DEFAULT_NAMES:
+                conn.execute("DELETE FROM blocklist WHERE id = ?", (row["id"],))
+                removed += 1
         conn.commit()
     finally:
         conn.close()
-    return n
+    apply_blocklist()
+    set_setting("legacy_blocklist_cleared", "1")
+    return {"cleared": removed, "already": False}
 
 
 def _tokens(value: str) -> list[str]:

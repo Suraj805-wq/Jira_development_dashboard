@@ -1,8 +1,8 @@
 """Curated directory of real fleet-management / telematics organisations.
 
 Each entry: (name, domain, country, country_code, city, category, employees, founded)
-Contacts are NOT stored here — they are produced by the enrichment layer
-(real APIs when keys are configured, or the clearly-labelled demo generator).
+Contacts are NOT stored here — they come from scraping each company's public site.
+LinkedIn URLs are only stored when a site actually links to them (never guessed).
 """
 
 CATEGORIES = [
@@ -250,12 +250,8 @@ def seed_companies() -> int:
     try:
         for (name, domain, country, code, city, category, employees, founded) in COMPANIES:
             website = f"https://www.{domain}"
-            linkedin = f"https://www.linkedin.com/company/{domain.split('.')[0]}"
-            description = (
-                f"{name} is a {category.lower()} provider headquartered in "
-                f"{city}, {country}. Focused on fleet visibility, safety and "
-                f"operational efficiency for logistics and field-service fleets."
-            )
+            linkedin = None  # never invent a LinkedIn URL
+            description = f"{name} — {category} based in {city}, {country}."
             cur = conn.execute(
                 """INSERT OR IGNORE INTO companies
                    (name, domain, website, country, country_code, city, category,

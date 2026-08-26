@@ -271,13 +271,11 @@ export default function CompanyDrawer({ company, onClose, onToast, onStatsChange
         )}
 
         <p className="source-note">
-          All data above was scraped from the company's own public website. Every item links to the
-          exact page it was found on. Emails are <strong>verified before saving</strong> — a{' '}
-          <strong>✓ verified</strong> badge means the mail server confirmed the mailbox exists.
-          <strong>◌ catch-all</strong> means the company accepts mail for any address, so the
-          address can't be confirmed individually. If a guessed email fails, FleetLeads
-          automatically tries other name combinations until one works. Executives' private mobile
-          numbers are not published anywhere public, so they can't be scraped by any free tool.
+          Names, titles, phones and published emails come from the company's public website
+          (each row links to its source page). A <strong>✓ verified</strong> badge means SMTP
+          confirmed the mailbox. <strong>derived</strong> means the address was guessed from the
+          name pattern and has <em>not</em> been confirmed — treat it as a lead, not a fact.
+          Catch-all domains accept any address, so they cannot be confirmed individually.
         </p>
       </div>
     </div>

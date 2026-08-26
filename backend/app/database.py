@@ -1,11 +1,14 @@
 """SQLite persistence layer (stdlib only, no ORM)."""
 from __future__ import annotations
 
+import json
 import sqlite3
+import threading
 from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 DB_PATH = DATA_DIR / "fleetleads.db"
+_DB_LOCK = threading.Lock()
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS companies (
@@ -113,6 +116,16 @@ CREATE TABLE IF NOT EXISTS worker_state (
     value TEXT
 );
 
+-- Live activity feed for the discovery worker (trimmed to last N rows).
+CREATE TABLE IF NOT EXISTS worker_log (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts      TEXT DEFAULT (datetime('now')),
+    job     TEXT,
+    level   TEXT,
+    message TEXT,
+    payload TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_emails_company ON emails(company_id);
 CREATE INDEX IF NOT EXISTS idx_phones_company ON phones(company_id);
 CREATE INDEX IF NOT EXISTS idx_socials_company ON socials(company_id);
@@ -200,13 +213,54 @@ def worker_get(key: str, default: str | None = None) -> str | None:
 
 
 def worker_set(key: str, value: str) -> None:
+    with _DB_LOCK:
+        conn = get_conn()
+        try:
+            conn.execute(
+                "INSERT INTO worker_state(key, value) VALUES(?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def worker_log(job: str, message: str, level: str = "info", payload: dict | None = None) -> None:
+    """Append one line to the live discovery feed (keeps the last 300)."""
+    with _DB_LOCK:
+        conn = get_conn()
+        try:
+            conn.execute(
+                "INSERT INTO worker_log(job, level, message, payload) VALUES (?,?,?,?)",
+                (job, level, message, json.dumps(payload) if payload else None),
+            )
+            conn.execute(
+                "DELETE FROM worker_log WHERE id NOT IN "
+                "(SELECT id FROM worker_log ORDER BY id DESC LIMIT 300)"
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def worker_log_tail(limit: int = 80) -> list[dict]:
     conn = get_conn()
     try:
-        conn.execute(
-            "INSERT INTO worker_state(key, value) VALUES(?, ?) "
-            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (key, value),
-        )
-        conn.commit()
+        rows = conn.execute(
+            "SELECT id, ts, job, level, message, payload FROM worker_log "
+            "ORDER BY id DESC LIMIT ?",
+            (max(1, min(limit, 300)),),
+        ).fetchall()
+        out = []
+        for r in rows:
+            item = dict(r)
+            if item.get("payload"):
+                try:
+                    item["payload"] = json.loads(item["payload"])
+                except json.JSONDecodeError:
+                    pass
+            out.append(item)
+        return out
     finally:
         conn.close()

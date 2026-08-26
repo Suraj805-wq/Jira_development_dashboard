@@ -43,9 +43,9 @@ export default function SettingsModal({ onClose, onSaved }) {
         </div>
 
         <p className="modal-intro">
-          FleetLeads reads contact details from public company websites, then <strong>verifies
-          emails before saving</strong> (MX + SMTP + catch-all detection). If a guessed email
-          fails, it tries other name combinations until one works.
+          FleetLeads reads contact details from public company websites. When verification is on,
+          only SMTP-confirmed or catch-all addresses are kept as <strong>verified</strong>.
+          Name-pattern guesses that do not confirm are stored as <strong>derived · unverified</strong>.
         </p>
 
         {loading ? (

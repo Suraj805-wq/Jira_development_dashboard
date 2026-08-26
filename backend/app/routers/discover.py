@@ -77,7 +77,7 @@ def discover_country(body: DiscoverIn):
                    (name, domain, website, country, country_code, city, category,
                     description, employees, founded, linkedin_url, tags)
                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (name, domain, f"https://www.{domain}", country, country_code, None,
+                (name, domain, f"https://{domain}", country, country_code, None,
                  "Fleet Management Software",
                  f"{name} — discovered via country search for {country}.",
                  None, None, None, "discovered"),
